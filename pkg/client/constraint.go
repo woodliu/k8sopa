@@ -7,7 +7,7 @@ import (
 )
 
 type constraint struct {
-	informer *Client
+	client *Client
 }
 
 const (
@@ -17,7 +17,7 @@ const (
 
 func (c *constraint) OnAdd(obj interface{}) {
 	constraintUnstructured := obj.(*unstructured.Unstructured)
-	_, err := c.informer.FrameworkClient.AddConstraint(context.TODO(), constraintUnstructured)
+	_, err := c.client.FrameworkClient.AddConstraint(context.TODO(), constraintUnstructured)
 	if nil != err {
 		log.Errorf("add constraint %s err:%s", constraintUnstructured.GetName(), err.Error())
 		return
@@ -25,12 +25,24 @@ func (c *constraint) OnAdd(obj interface{}) {
 }
 
 func (c *constraint) OnUpdate(oldObj, newObj interface{}) {
-	log.Warnf("not implement！")
+	oldConstraint := oldObj.(*unstructured.Unstructured)
+	newConstraint := newObj.(*unstructured.Unstructured)
+	_,err := c.client.FrameworkClient.RemoveConstraint(context.TODO(), oldConstraint)
+	if nil != err{
+		log.Errorf("remove old constraint:%s when update err:%s",oldConstraint.GetName(),err.Error())
+		return
+	}
+
+	c.client.FrameworkClient.AddConstraint(context.TODO(), newConstraint)
+	if nil != err{
+		log.Errorf("add updated constraint:%s when update err:%s",newConstraint.GetName(),err.Error())
+		return
+	}
 }
 
 func (c *constraint) OnDelete(obj interface{}) {
 	constraintUnstructured := obj.(*unstructured.Unstructured)
-	_, err := c.informer.FrameworkClient.RemoveConstraint(context.TODO(), constraintUnstructured)
+	_, err := c.client.FrameworkClient.RemoveConstraint(context.TODO(), constraintUnstructured)
 	if nil != err {
 		log.Errorf("remove constraint %s err:%s", constraintUnstructured.GetName(), err.Error())
 		return

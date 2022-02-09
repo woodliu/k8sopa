@@ -9,11 +9,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"stash.weimob.com/devops/go_common/log"
 )
 
 type Client struct {
+	K8sClientSet                 *kubernetes.Clientset
 	FrameworkClient              *frameworkClient.Client
 	ApiExtensionsV1Client        *rest.RESTClient
 	DynamicSharedInformerFactory dynamicinformer.DynamicSharedInformerFactory
@@ -52,6 +54,11 @@ func NewClient(host, token string) (*Client, error) {
 	}
 
 	restCfg := NewRestCfg(host, token)
+	clientSet, err := kubernetes.NewForConfig(restCfg)
+	if nil != err {
+		return nil, err
+	}
+
 	dynamicClient, err := dynamic.NewForConfig(restCfg)
 	if nil != err {
 		return nil, err
@@ -63,6 +70,7 @@ func NewClient(host, token string) (*Client, error) {
 	}
 
 	return &Client{
+		K8sClientSet:                 clientSet,
 		FrameworkClient:              frameworkClient,
 		DynamicSharedInformerFactory: dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 0),
 		ApiExtensionsV1Client:        apiExtensionsV1Client,
@@ -71,18 +79,12 @@ func NewClient(host, token string) (*Client, error) {
 	}, nil
 }
 
-func StartConstraintTmplInformer(host,token string)*Client{
-	client, err := NewClient(host, token)
-	if nil != err {
-		panic(err)
-	}
-
-	dynamicInformer := client.DynamicSharedInformerFactory.ForResource(constraintTemplateGvr)
-	dynamicInformer.Informer().AddEventHandler(&constraintTemplate{})
+func (c *Client)StartConstraintTmplInformer(){
+	dynamicInformer := c.DynamicSharedInformerFactory.ForResource(constraintTemplateGvr)
+	dynamicInformer.Informer().AddEventHandler(&constraintTemplate{client: c})
 
 	log.Info("start constraint template informer")
-	go client.DynamicSharedInformerFactory.Start(client.ConstraintTmplStopCh)
-	return client
+	go c.DynamicSharedInformerFactory.Start(c.ConstraintTmplStopCh)
 }
 
 func (c *Client)StopConstraintTmplInformer()  {
@@ -91,7 +93,7 @@ func (c *Client)StopConstraintTmplInformer()  {
 
 func (c *Client)startConstraintInformer(gvr schema.GroupVersionResource) {
 	dynamicInformer := c.DynamicSharedInformerFactory.ForResource(gvr)
-	dynamicInformer.Informer().AddEventHandler(&constraint{})
+	dynamicInformer.Informer().AddEventHandler(&constraint{client: c})
 
 	go c.DynamicSharedInformerFactory.Start(c.ConstraintStopCh[gvr])
 }
